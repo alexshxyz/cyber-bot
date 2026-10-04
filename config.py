@@ -23,8 +23,12 @@ API_RETRY_DELAY_SECONDS = 3
 POLL_INTERVAL_SECONDS = 120
 # Путь к файлу с полученными матчами и коэффициентами.
 DATA_FILE = PROJECT_ROOT / "data.json"
+# Режим сохранения подробных данных матчей (включается значением 1).
+DEBUGMODE = os.getenv("DEBUGMODE", "0").strip()
 # Путь к файлу с сигналами, подготовленными analyzer.
 MATCHES_FILE = PROJECT_ROOT / "matches.json"
+# Путь к файлу логов приложения.
+BOT_LOG_FILE = PROJECT_ROOT / "bot.log"
 # Минимальный процент падения коэффициента для создания сигнала.
 DROP_THRESHOLD_PERCENT = Decimal("20")
 

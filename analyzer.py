@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from html import escape
 from typing import Literal
 
@@ -54,7 +54,8 @@ def _analyze_1x2(event: UpcomingEvent) -> MatchAlert | None:
     )
     telegram_message = (
         f"{_format_telegram_match_header(event)}\n\n"
-        f"Победа {'1' if side == 'Home' else '2'} @{new_value}"
+        f"Победа {'1' if side == 'Home' else '2'}\n"
+        f"{_format_odds(new_value)}"
     )
     return MatchAlert(event.event_id, "1x2_odds", message, telegram_message)
 
@@ -91,7 +92,8 @@ def _analyze_ah(event: UpcomingEvent) -> MatchAlert | None:
     )
     telegram_message = (
         f"{_format_telegram_match_header(event)}\n\n"
-        f"Фора {'1' if side == 'Home' else '2'} {handicap:+} @{new_value}"
+        f"Фора {'1' if side == 'Home' else '2'} {handicap:+}\n"
+        f"{_format_odds(new_value)}"
     )
     return MatchAlert(event.event_id, "ah_odds", message, telegram_message)
 
@@ -102,6 +104,11 @@ def _format_telegram_match_header(event: UpcomingEvent) -> str:
         f"🎮 <b>{escape(event.league)}</b>\n"
         f"{escape(event.home)} — {escape(event.away)}"
     )
+
+
+# Округляет коэффициент до двух знаков после десятичной точки.
+def _format_odds(odds: Decimal) -> str:
+    return str(odds.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 # Сравнивает старые и новые коэффициенты отдельно для каждой стороны.

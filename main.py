@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from analyzer import MatchAlert, analyze_events
 from client import BetsApiClient, BetsApiRequestError
-from config import DATA_FILE, MATCHES_FILE, POLL_INTERVAL_SECONDS
+from config import DATA_FILE, DEBUGMODE, MATCHES_FILE, POLL_INTERVAL_SECONDS
 from data import BetsApiDataError, UpcomingEvent, get_upcoming_events
 from logger import configure_logging, get_logger
 from notifier import TelegramNotificationError, send_alert
@@ -108,19 +108,20 @@ def run_cycle() -> bool:
         logger.error("%s", error)
         return False
 
-    try:
-        json_data = json.dumps(
-            [_event_to_json(event) for event in events],
-            ensure_ascii=False,
-            indent=2,
-            default=_json_default,
-        )
-        DATA_FILE.write_text(f"{json_data}\n", encoding="utf-8")
-    except (OSError, ValueError) as error:
-        logger.error("Could not write match data to %s: %s", DATA_FILE, error)
-        return False
+    if DEBUGMODE == "1":
+        try:
+            json_data = json.dumps(
+                [_event_to_json(event) for event in events],
+                ensure_ascii=False,
+                indent=2,
+                default=_json_default,
+            )
+            DATA_FILE.write_text(f"{json_data}\n", encoding="utf-8")
+        except (OSError, ValueError) as error:
+            logger.error("Could not write match data to %s: %s", DATA_FILE, error)
+            return False
 
-    logger.info("Data for %d matches saved.", len(events))
+        logger.info("Data for %d matches saved.", len(events))
 
     try:
         saved_alerts, existing_keys = _read_existing_alerts()

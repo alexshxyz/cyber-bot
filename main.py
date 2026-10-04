@@ -7,6 +7,7 @@ from client import BetsApiClient, BetsApiRequestError
 from config import DATA_FILE, MATCHES_FILE, POLL_INTERVAL_SECONDS
 from data import BetsApiDataError, UpcomingEvent, get_upcoming_events
 from logger import configure_logging, get_logger
+from notifier import TelegramNotificationError, send_alert
 
 
 # Преобразует точные десятичные числа коэффициентов в JSON-числа.
@@ -50,9 +51,17 @@ def _alert_to_json(alert: MatchAlert) -> dict[str, str]:
 # Читает историю сигналов и распознает рынок в старом формате без поля market.
 def _read_existing_alerts() -> tuple[list[dict[str, object]], set[tuple[str, str]]]:
     try:
-        saved_alerts = json.loads(MATCHES_FILE.read_text(encoding="utf-8"))
+        matches_text = MATCHES_FILE.read_text(encoding="utf-8")
     except FileNotFoundError:
         return [], set()
+
+    if not matches_text.strip():
+        return [], set()
+
+    try:
+        saved_alerts = json.loads(matches_text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Invalid JSON in {MATCHES_FILE}: {error}") from error
 
     if not isinstance(saved_alerts, list):
         raise ValueError(f"Expected a JSON array in {MATCHES_FILE}.")
@@ -100,20 +109,6 @@ def run_cycle() -> bool:
         return False
 
     try:
-        saved_alerts, existing_keys = _read_existing_alerts()
-        new_alerts: list[MatchAlert] = []
-        for alert in analyze_events(events):
-            alert_key = (alert.event_id, alert.market)
-            if alert_key in existing_keys:
-                logger.info(
-                    "Skipping duplicate %s signal for match %s.",
-                    alert.market,
-                    alert.event_id,
-                )
-                continue
-            existing_keys.add(alert_key)
-            new_alerts.append(alert)
-
         json_data = json.dumps(
             [_event_to_json(event) for event in events],
             ensure_ascii=False,
@@ -121,20 +116,64 @@ def run_cycle() -> bool:
             default=_json_default,
         )
         DATA_FILE.write_text(f"{json_data}\n", encoding="utf-8")
+    except (OSError, ValueError) as error:
+        logger.error("Could not write match data to %s: %s", DATA_FILE, error)
+        return False
+
+    logger.info("Data for %d matches saved.", len(events))
+
+    try:
+        saved_alerts, existing_keys = _read_existing_alerts()
+        new_alerts: list[MatchAlert] = []
+        duplicate_alerts: list[MatchAlert] = []
+        for alert in analyze_events(events):
+            alert_key = (alert.event_id, alert.market)
+            if alert_key in existing_keys:
+                duplicate_alerts.append(alert)
+                continue
+            existing_keys.add(alert_key)
+            new_alerts.append(alert)
+    except (OSError, ValueError) as error:
+        logger.error("Could not read alert history from %s: %s", MATCHES_FILE, error)
+        return False
+
+    for alert in duplicate_alerts:
+        logger.info(
+            "Skipping duplicate %s signal for match %s.",
+            alert.market,
+            alert.event_id,
+        )
+
+    delivered_alerts: list[MatchAlert] = []
+    notification_failed = False
+    for alert in new_alerts:
+        try:
+            send_alert(alert)
+        except TelegramNotificationError as error:
+            logger.error(
+                "Could not send match %s for %s: %s",
+                alert.event_id,
+                alert.market,
+                error,
+            )
+            notification_failed = True
+            continue
+
+        delivered_alerts.append(alert)
+        logger.info("Match %s sent for %s.", alert.event_id, alert.market)
+
+    try:
         matches_json = json.dumps(
-            saved_alerts + [_alert_to_json(alert) for alert in new_alerts],
+            saved_alerts + [_alert_to_json(alert) for alert in delivered_alerts],
             ensure_ascii=False,
             indent=2,
         )
         MATCHES_FILE.write_text(f"{matches_json}\n", encoding="utf-8")
     except (OSError, ValueError) as error:
-        logger.error("Could not write match data or alerts: %s", error)
+        logger.error("Could not write alerts to %s: %s", MATCHES_FILE, error)
         return False
 
-    logger.info("Data for %d matches saved.", len(events))
-    for alert in new_alerts:
-        logger.info("Match %s sent for %s.", alert.event_id, alert.market)
-    return True
+    return not notification_failed
 
 
 # Повторяет загрузку данных через заданный интервал до остановки пользователем.

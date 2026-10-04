@@ -11,6 +11,10 @@ API_BASE_URL = "https://api.b365api.com/v3"
 API_SPORT_ID = 151
 # Таймаут одного запроса к BetsAPI в секундах.
 API_TIMEOUT_SECONDS = 20
+# Таймаут запроса к Telegram Bot API в секундах.
+TELEGRAM_TIMEOUT_SECONDS = 20
+# Базовый URL Telegram Bot API.
+TELEGRAM_API_URL = "https://api.telegram.org"
 # Количество повторных попыток запроса к BetsAPI после первой ошибки.
 API_MAX_RETRIES = 4
 # Пауза между повторными попытками запроса в секундах.
@@ -52,3 +56,10 @@ def _load_env_file() -> None:
 _load_env_file()
 # Ключ API BetsAPI из окружения или файла .env.
 API_KEY = os.getenv("API_KEY", "").strip()
+# Настройки канала Telegram Bot API.
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+CHANNEL_ID = os.getenv("CHANNEL_ID", "").strip()
+TELEGRAM_PROXY_HOST = os.getenv("TELEGRAM_PROXY_HOST", "").strip()
+TELEGRAM_PROXY_PORT = os.getenv("TELEGRAM_PROXY_PORT", "").strip()
+TELEGRAM_PROXY_USERNAME = os.getenv("TELEGRAM_PROXY_USERNAME", "").strip()
+TELEGRAM_PROXY_PASSWORD = os.getenv("TELEGRAM_PROXY_PASSWORD", "").strip()

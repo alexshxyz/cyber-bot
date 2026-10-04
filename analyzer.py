@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
+from html import escape
 from typing import Literal
 
 from config import DROP_THRESHOLD_PERCENT
@@ -14,6 +15,7 @@ class MatchAlert:
     event_id: str
     market: Market
     message: str
+    telegram_message: str
 
 
 # Проверяет изменение коэффициента для одной стороны от старой записи к новой.
@@ -50,7 +52,11 @@ def _analyze_1x2(event: UpcomingEvent) -> MatchAlert | None:
         f"Drop 1x2: {side} Win {old_value} -> {new_value}\n"
         f"{drop_percent:.2f}%"
     )
-    return MatchAlert(event.event_id, "1x2_odds", message)
+    telegram_message = (
+        f"{_format_telegram_match_header(event)}\n\n"
+        f"Победа {'1' if side == 'Home' else '2'} @{new_value}"
+    )
+    return MatchAlert(event.event_id, "1x2_odds", message, telegram_message)
 
 
 # Создает уведомление о падении коэффициента AH с учетом стороны и форы.
@@ -60,6 +66,9 @@ def _analyze_ah(event: UpcomingEvent) -> MatchAlert | None:
 
     old_odds = event.ah_odds[-1]
     new_odds = event.ah_odds[0]
+    if old_odds.handicap != new_odds.handicap:
+        return None
+
     drops = _get_side_drops(old_odds, new_odds)
     qualifying_drops = [
         item
@@ -80,7 +89,19 @@ def _analyze_ah(event: UpcomingEvent) -> MatchAlert | None:
         f"Drop AH: {side} {handicap:+} Win {old_value} -> {new_value}\n"
         f"{drop_percent:.2f}%"
     )
-    return MatchAlert(event.event_id, "ah_odds", message)
+    telegram_message = (
+        f"{_format_telegram_match_header(event)}\n\n"
+        f"Фора {'1' if side == 'Home' else '2'} {handicap:+} @{new_value}"
+    )
+    return MatchAlert(event.event_id, "ah_odds", message, telegram_message)
+
+
+# Формирует экранированный заголовок матча для Telegram с выделенной лигой.
+def _format_telegram_match_header(event: UpcomingEvent) -> str:
+    return (
+        f"🎮 <b>{escape(event.league)}</b>\n"
+        f"{escape(event.home)} — {escape(event.away)}"
+    )
 
 
 # Сравнивает старые и новые коэффициенты отдельно для каждой стороны.

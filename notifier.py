@@ -78,7 +78,11 @@ def send_alert(alert: MatchAlert) -> None:
     try:
         response = requests.post(
             f"{TELEGRAM_API_URL}/bot{BOT_TOKEN}/sendMessage",
-            json={"chat_id": CHANNEL_ID, "text": alert.message},
+            json={
+                "chat_id": CHANNEL_ID,
+                "text": alert.telegram_message,
+                "parse_mode": "HTML",
+            },
             proxies=proxies,
             timeout=TELEGRAM_TIMEOUT_SECONDS,
         )

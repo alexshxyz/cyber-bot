@@ -127,7 +127,8 @@ def get_upcoming_events(client: BetsApiClient, day: str = "TODAY") -> list[Upcom
             executor.submit(_enrich_event, client, event)
             for event in events
         ]
-        return [future.result() for future in futures]
+        enriched_events = [future.result() for future in futures]
+        return [event for event in enriched_events if event is not None]
 
 
 # Проверяет объект участника матча и возвращает его название.
@@ -144,7 +145,7 @@ def _get_name(event: dict[str, Any], participant: str) -> str:
 # Получает для матча историю 1X2 и азиатского гандикапа в хронологическом порядке.
 def _get_event_odds(
     client: BetsApiClient, event_id: str
-) -> tuple[list[MatchOdds], list[HandicapOdds]]:
+) -> tuple[list[MatchOdds], list[HandicapOdds]] | None:
     payload = _parse_response(client.get_event_odds(event_id))
     if payload.get("success") not in (1, "1"):
         raise BetsApiDataError(f"BetsAPI reported that odds retrieval failed for event {event_id}.")
@@ -158,6 +159,10 @@ def _get_event_odds(
 
     one_x_two = _get_market_records(odds, "151_1", event_id)
     handicap = _get_market_records(odds, "151_2", event_id)
+    if any(record.get("ss") is not None for record in (*one_x_two, *handicap)):
+        logger.info("Skipping live match %s.", event_id)
+        return None
+
     return (
         [
             MatchOdds(
@@ -178,9 +183,14 @@ def _get_event_odds(
 
 
 # Получает коэффициенты для матча и возвращает его дополненную запись.
-def _enrich_event(client: BetsApiClient, event: UpcomingEvent) -> UpcomingEvent:
+def _enrich_event(
+    client: BetsApiClient, event: UpcomingEvent
+) -> UpcomingEvent | None:
     logger.debug("Requesting odds for event %s.", event.event_id)
-    odds_1x2, ah_odds = _get_event_odds(client, event.event_id)
+    odds = _get_event_odds(client, event.event_id)
+    if odds is None:
+        return None
+    odds_1x2, ah_odds = odds
     return replace(event, odds_1x2=odds_1x2, ah_odds=ah_odds)
 
 

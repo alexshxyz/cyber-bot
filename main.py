@@ -2,8 +2,9 @@ import json
 import time
 from decimal import Decimal
 
+from analyzer import MatchAlert, analyze_events
 from client import BetsApiClient, BetsApiRequestError
-from config import DATA_FILE, POLL_INTERVAL_SECONDS
+from config import DATA_FILE, MATCHES_FILE, POLL_INTERVAL_SECONDS
 from data import BetsApiDataError, UpcomingEvent, get_upcoming_events
 from logger import configure_logging, get_logger
 
@@ -37,6 +38,11 @@ def _event_to_json(event: UpcomingEvent) -> dict[str, object]:
     }
 
 
+# Преобразует уведомление в структуру JSON для последующей передачи notifier.
+def _alert_to_json(alert: MatchAlert) -> dict[str, str]:
+    return {"event_id": alert.event_id, "message": alert.message}
+
+
 # Выполняет один цикл загрузки матчей и записи результата.
 def run_cycle() -> bool:
     logger = get_logger(__name__)
@@ -46,6 +52,7 @@ def run_cycle() -> bool:
         logger.error("%s", error)
         return False
 
+    alerts = analyze_events(events)
     try:
         json_data = json.dumps(
             [_event_to_json(event) for event in events],
@@ -54,11 +61,19 @@ def run_cycle() -> bool:
             default=_json_default,
         )
         DATA_FILE.write_text(f"{json_data}\n", encoding="utf-8")
+        matches_json = json.dumps(
+            [_alert_to_json(alert) for alert in alerts],
+            ensure_ascii=False,
+            indent=2,
+        )
+        MATCHES_FILE.write_text(f"{matches_json}\n", encoding="utf-8")
     except OSError as error:
-        logger.error("Could not write match data to %s: %s", DATA_FILE, error)
+        logger.error("Could not write match data or alerts: %s", error)
         return False
 
     logger.info("Data for %d matches saved.", len(events))
+    for alert in alerts:
+        logger.info("Match %s sent.", alert.event_id)
     return True
 
 

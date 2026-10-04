@@ -40,7 +40,54 @@ def _event_to_json(event: UpcomingEvent) -> dict[str, object]:
 
 # Преобразует уведомление в структуру JSON для последующей передачи notifier.
 def _alert_to_json(alert: MatchAlert) -> dict[str, str]:
-    return {"event_id": alert.event_id, "message": alert.message}
+    return {
+        "event_id": alert.event_id,
+        "market": alert.market,
+        "message": alert.message,
+    }
+
+
+# Читает историю сигналов и распознает рынок в старом формате без поля market.
+def _read_existing_alerts() -> tuple[list[dict[str, object]], set[tuple[str, str]]]:
+    try:
+        saved_alerts = json.loads(MATCHES_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [], set()
+
+    if not isinstance(saved_alerts, list):
+        raise ValueError(f"Expected a JSON array in {MATCHES_FILE}.")
+
+    existing_alerts: list[dict[str, object]] = []
+    existing_keys: set[tuple[str, str]] = set()
+    for index, saved_alert in enumerate(saved_alerts):
+        if not isinstance(saved_alert, dict):
+            raise ValueError(f"Invalid alert at index {index} in {MATCHES_FILE}.")
+
+        event_id = saved_alert.get("event_id")
+        message = saved_alert.get("message")
+        if not isinstance(event_id, str) or not event_id:
+            raise ValueError(f"Invalid event_id at index {index} in {MATCHES_FILE}.")
+        if not isinstance(message, str):
+            raise ValueError(f"Invalid message at index {index} in {MATCHES_FILE}.")
+
+        market = saved_alert.get("market")
+        if market is None:
+            if "\nDrop 1x2:" in message:
+                market = "1x2_odds"
+            elif "\nDrop AH:" in message:
+                market = "ah_odds"
+            else:
+                raise ValueError(
+                    f"Could not determine market for alert at index {index} "
+                    f"in {MATCHES_FILE}."
+                )
+        elif not isinstance(market, str) or market not in {"1x2_odds", "ah_odds"}:
+            raise ValueError(f"Invalid market at index {index} in {MATCHES_FILE}.")
+
+        existing_alerts.append(saved_alert)
+        existing_keys.add((event_id, market))
+
+    return existing_alerts, existing_keys
 
 
 # Выполняет один цикл загрузки матчей и записи результата.
@@ -52,8 +99,21 @@ def run_cycle() -> bool:
         logger.error("%s", error)
         return False
 
-    alerts = analyze_events(events)
     try:
+        saved_alerts, existing_keys = _read_existing_alerts()
+        new_alerts: list[MatchAlert] = []
+        for alert in analyze_events(events):
+            alert_key = (alert.event_id, alert.market)
+            if alert_key in existing_keys:
+                logger.info(
+                    "Skipping duplicate %s signal for match %s.",
+                    alert.market,
+                    alert.event_id,
+                )
+                continue
+            existing_keys.add(alert_key)
+            new_alerts.append(alert)
+
         json_data = json.dumps(
             [_event_to_json(event) for event in events],
             ensure_ascii=False,
@@ -62,18 +122,18 @@ def run_cycle() -> bool:
         )
         DATA_FILE.write_text(f"{json_data}\n", encoding="utf-8")
         matches_json = json.dumps(
-            [_alert_to_json(alert) for alert in alerts],
+            saved_alerts + [_alert_to_json(alert) for alert in new_alerts],
             ensure_ascii=False,
             indent=2,
         )
         MATCHES_FILE.write_text(f"{matches_json}\n", encoding="utf-8")
-    except OSError as error:
+    except (OSError, ValueError) as error:
         logger.error("Could not write match data or alerts: %s", error)
         return False
 
     logger.info("Data for %d matches saved.", len(events))
-    for alert in alerts:
-        logger.info("Match %s sent.", alert.event_id)
+    for alert in new_alerts:
+        logger.info("Match %s sent for %s.", alert.event_id, alert.market)
     return True
 
 

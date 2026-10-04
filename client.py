@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 from config import (
     API_BASE_URL,
     API_KEY,
-    API_MAX_ATTEMPTS,
+    API_MAX_RETRIES,
     API_RETRY_DELAY_SECONDS,
     API_SPORT_ID,
     API_TIMEOUT_SECONDS,
@@ -67,13 +67,14 @@ class BetsApiClient:
     # Отправляет HTTP-запрос и повторяет его при временных ошибках API.
     @staticmethod
     def _request_bytes(request: Request, request_description: str) -> bytes:
-        for attempt in range(1, API_MAX_ATTEMPTS + 1):
+        max_attempts = API_MAX_RETRIES + 1
+        for attempt in range(1, max_attempts + 1):
             try:
                 with urlopen(request, timeout=API_TIMEOUT_SECONDS) as response:
                     return response.read()
             except HTTPError as error:
                 should_retry = error.code == 429 or error.code == 408 or 500 <= error.code <= 599
-                if not should_retry or attempt == API_MAX_ATTEMPTS:
+                if not should_retry or attempt == max_attempts:
                     status_code = error.code
                     error.close()
                     raise BetsApiRequestError(
@@ -90,11 +91,11 @@ class BetsApiClient:
                     request_description,
                     API_RETRY_DELAY_SECONDS,
                     attempt + 1,
-                    API_MAX_ATTEMPTS,
+                    max_attempts,
                 )
                 time.sleep(API_RETRY_DELAY_SECONDS)
             except (URLError, TimeoutError) as error:
-                if attempt == API_MAX_ATTEMPTS:
+                if attempt == max_attempts:
                     raise BetsApiRequestError(
                         f"Could not complete BetsAPI request for {request_description} "
                         f"after {attempt} attempt(s): connection failed or timed out."
@@ -107,7 +108,7 @@ class BetsApiClient:
                     error,
                     API_RETRY_DELAY_SECONDS,
                     attempt + 1,
-                    API_MAX_ATTEMPTS,
+                    max_attempts,
                 )
                 time.sleep(API_RETRY_DELAY_SECONDS)
 

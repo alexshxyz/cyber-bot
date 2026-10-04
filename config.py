@@ -11,12 +11,12 @@ API_BASE_URL = "https://api.b365api.com/v3"
 API_SPORT_ID = 151
 # Таймаут одного запроса к BetsAPI в секундах.
 API_TIMEOUT_SECONDS = 20
-# Максимальное количество попыток запроса к BetsAPI.
-API_MAX_ATTEMPTS = 3
+# Количество повторных попыток запроса к BetsAPI после первой ошибки.
+API_MAX_RETRIES = 4
 # Пауза между повторными попытками запроса в секундах.
 API_RETRY_DELAY_SECONDS = 3
 # Интервал между циклами сбора матчей в секундах.
-POLL_INTERVAL_SECONDS = 60
+POLL_INTERVAL_SECONDS = 120
 # Путь к файлу с полученными матчами и коэффициентами.
 DATA_FILE = PROJECT_ROOT / "data.json"
 # Путь к файлу с сигналами, подготовленными analyzer.

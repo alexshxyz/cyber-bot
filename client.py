@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -9,8 +7,7 @@ from config import (
     API_BASE_URL,
     API_KEY,
     API_MAX_ATTEMPTS,
-    API_RETRY_BASE_DELAY_SECONDS,
-    API_RETRY_MAX_DELAY_SECONDS,
+    API_RETRY_DELAY_SECONDS,
     API_SPORT_ID,
     API_TIMEOUT_SECONDS,
 )
@@ -84,19 +81,18 @@ class BetsApiClient:
                         f"HTTP status {status_code} after {attempt} attempt(s)."
                     ) from None
 
-                delay = BetsApiClient._get_retry_delay(error, attempt)
                 status_code = error.code
                 error.close()
                 logger.warning(
-                    "BetsAPI returned HTTP %d for %s; retrying in %.1f seconds "
+                    "BetsAPI returned HTTP %d for %s; retrying in %d seconds "
                     "(attempt %d/%d).",
                     status_code,
                     request_description,
-                    delay,
+                    API_RETRY_DELAY_SECONDS,
                     attempt + 1,
                     API_MAX_ATTEMPTS,
                 )
-                time.sleep(delay)
+                time.sleep(API_RETRY_DELAY_SECONDS)
             except (URLError, TimeoutError) as error:
                 if attempt == API_MAX_ATTEMPTS:
                     raise BetsApiRequestError(
@@ -104,42 +100,15 @@ class BetsApiClient:
                         f"after {attempt} attempt(s): connection failed or timed out."
                     ) from error
 
-                delay = min(
-                    API_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
-                    API_RETRY_MAX_DELAY_SECONDS,
-                )
                 logger.warning(
-                    "BetsAPI request for %s failed (%s); retrying in %.1f seconds "
+                    "BetsAPI request for %s failed (%s); retrying in %d seconds "
                     "(attempt %d/%d).",
                     request_description,
                     error,
-                    delay,
+                    API_RETRY_DELAY_SECONDS,
                     attempt + 1,
                     API_MAX_ATTEMPTS,
                 )
-                time.sleep(delay)
+                time.sleep(API_RETRY_DELAY_SECONDS)
 
         raise BetsApiRequestError(f"BetsAPI request for {request_description} failed.")
-
-    # Выбирает паузу повтора с учетом заголовка Retry-After от сервера.
-    @staticmethod
-    def _get_retry_delay(error: HTTPError, attempt: int) -> float:
-        fallback_delay = min(
-            API_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
-            API_RETRY_MAX_DELAY_SECONDS,
-        )
-        retry_after = error.headers.get("Retry-After") if error.headers else None
-        if retry_after is None:
-            return fallback_delay
-
-        try:
-            return min(max(0.0, float(retry_after)), API_RETRY_MAX_DELAY_SECONDS)
-        except ValueError:
-            try:
-                retry_time = parsedate_to_datetime(retry_after)
-            except (TypeError, ValueError, OverflowError):
-                return fallback_delay
-            if retry_time.tzinfo is None:
-                retry_time = retry_time.replace(tzinfo=timezone.utc)
-            delay = max(0.0, (retry_time - datetime.now(timezone.utc)).total_seconds())
-            return min(delay, API_RETRY_MAX_DELAY_SECONDS)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
@@ -64,7 +63,7 @@ def get_upcoming_events(client: BetsApiClient, day: str = "TODAY") -> list[Upcom
     page = 1
     total: int | None = None
 
-    logger.info("Requesting upcoming matches from BetsAPI.")
+    logger.info("Requesting upcoming matches ID from BetsAPI...")
     while total is None or records_read < total:
         payload = _parse_response(client.get_upcoming_events_page(page=page, day=day))
         if payload.get("success") not in (1, "1"):
@@ -116,14 +115,15 @@ def get_upcoming_events(client: BetsApiClient, day: str = "TODAY") -> list[Upcom
     if not events:
         return []
 
-    worker_count = len(events)
     logger.info(
-        "Found %d matches; requesting odds with %d concurrent requests.",
+        "Found %d matches, requesting odds...",
         len(events),
-        worker_count,
     )
-    with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        return list(executor.map(lambda event: _enrich_event(client, event), events))
+    enriched_events: list[UpcomingEvent] = []
+    for index, event in enumerate(events, start=1):
+        logger.info("%d/%d Getting data for %s", index, len(events), event.event_id)
+        enriched_events.append(_enrich_event(client, event))
+    return enriched_events
 
 
 # Проверяет объект участника матча и возвращает его название.

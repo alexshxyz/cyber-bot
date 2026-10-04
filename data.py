@@ -163,6 +163,12 @@ def _get_event_odds(
         logger.info("Skipping live match %s.", event_id)
         return None
 
+    one_x_two = _filter_unavailable_odds(one_x_two, ("home_od", "away_od"))
+    handicap = _filter_unavailable_odds(
+        handicap,
+        ("home_od", "away_od", "handicap"),
+    )
+
     return (
         [
             MatchOdds(
@@ -180,6 +186,20 @@ def _get_event_odds(
             for record in handicap
         ],
     )
+
+
+# Удаляет записи рынка с незаданными коэффициентами, обозначенными дефисом.
+def _filter_unavailable_odds(
+    records: list[dict[str, Any]], fields: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    return [
+        record
+        for record in records
+        if not any(
+            isinstance(record.get(field), str) and record[field].strip() == "-"
+            for field in fields
+        )
+    ]
 
 
 # Получает коэффициенты для матча и возвращает его дополненную запись.

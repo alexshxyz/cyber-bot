@@ -24,7 +24,7 @@ POLL_INTERVAL_SECONDS = 120
 # Путь к файлу с полученными матчами и коэффициентами.
 DATA_FILE = PROJECT_ROOT / "data.json"
 # Режим сохранения подробных данных матчей (включается значением 1).
-DEBUGMODE = os.getenv("DEBUGMODE", "0").strip()
+DEBUGMODE = os.getenv("DEBUGMODE", "1").strip()
 # Путь к файлу с сигналами, подготовленными analyzer.
 MATCHES_FILE = PROJECT_ROOT / "matches.json"
 # Путь к файлу логов приложения.

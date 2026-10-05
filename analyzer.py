@@ -4,7 +4,7 @@ from html import escape
 from typing import Literal
 from urllib.parse import quote
 
-from config import DROP_THRESHOLD_PERCENT
+from config import DROP_THRESHOLD_PERCENT, MAX_SIGNAL_ODDS
 from data import HandicapOdds, MatchOdds, UpcomingEvent
 
 
@@ -38,7 +38,11 @@ def _analyze_1x2(event: UpcomingEvent) -> MatchAlert | None:
     qualifying_drops = [
         item
         for item in drops
-        if item[3] is not None and item[3] > DROP_THRESHOLD_PERCENT
+        if (
+            item[3] is not None
+            and item[3] > DROP_THRESHOLD_PERCENT
+            and item[2] <= MAX_SIGNAL_ODDS
+        )
     ]
     if not qualifying_drops:
         return None
@@ -75,7 +79,11 @@ def _analyze_ah(event: UpcomingEvent) -> MatchAlert | None:
     qualifying_drops = [
         item
         for item in drops
-        if item[3] is not None and item[3] > DROP_THRESHOLD_PERCENT
+        if (
+            item[3] is not None
+            and item[3] > DROP_THRESHOLD_PERCENT
+            and item[2] <= MAX_SIGNAL_ODDS
+        )
     ]
     if not qualifying_drops:
         return None

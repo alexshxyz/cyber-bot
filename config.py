@@ -31,6 +31,8 @@ MATCHES_FILE = PROJECT_ROOT / "matches.json"
 BOT_LOG_FILE = PROJECT_ROOT / "bot.log"
 # Минимальный процент падения коэффициента для создания сигнала.
 DROP_THRESHOLD_PERCENT = Decimal("20")
+# Максимальный новый коэффициент для создания сигнала.
+MAX_SIGNAL_ODDS = Decimal("3.0")
 
 
 # Загружает переменные окружения из файла .env, не перезаписывая системные.

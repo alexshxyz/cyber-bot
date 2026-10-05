@@ -94,7 +94,7 @@ class BetsApiClient:
                     max_attempts,
                 )
                 time.sleep(API_RETRY_DELAY_SECONDS)
-            except (URLError, TimeoutError) as error:
+            except (URLError, TimeoutError, ConnectionError) as error:
                 if attempt == max_attempts:
                     raise BetsApiRequestError(
                         f"Could not complete BetsAPI request for {request_description} "

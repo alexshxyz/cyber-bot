@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from html import escape
 from typing import Literal
+from urllib.parse import quote
 
 from config import DROP_THRESHOLD_PERCENT
 from data import HandicapOdds, MatchOdds, UpcomingEvent
@@ -100,9 +101,16 @@ def _analyze_ah(event: UpcomingEvent) -> MatchAlert | None:
 
 # Формирует экранированный заголовок матча для Telegram с выделенной лигой.
 def _format_telegram_match_header(event: UpcomingEvent) -> str:
+    home_slug = "-".join(event.home.lower().split())
+    away_slug = "-".join(event.away.lower().split())
+    match_url = (
+        "https://betsapi.com/esports/rs/bet365/"
+        f"{quote(event.event_id, safe='')}/{quote(home_slug, safe='-')}"
+        f"-vs-{quote(away_slug, safe='-')}"
+    )
     return (
         f"🎮 <b>{escape(event.league)}</b>\n"
-        f"{escape(event.home)} — {escape(event.away)}"
+        f'<a href="{match_url}">{escape(event.home)} — {escape(event.away)}</a>'
     )
 
 

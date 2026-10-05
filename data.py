@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
+from config import MAX_MATCH_START_HOURS
 from logger import get_logger
 
 if TYPE_CHECKING:
@@ -58,7 +60,7 @@ def _parse_response(response_body: bytes) -> dict[str, Any]:
 
 # Возвращает предстоящие матчи с названием лиги и обеих команд.
 def get_upcoming_events(client: BetsApiClient, day: str = "TODAY") -> list[UpcomingEvent]:
-    events: list[UpcomingEvent] = []
+    events_with_start_times: list[tuple[UpcomingEvent, int]] = []
     seen_ids: set[str] = set()
     records_read = 0
     page = 1
@@ -102,7 +104,10 @@ def get_upcoming_events(client: BetsApiClient, day: str = "TODAY") -> list[Upcom
                 league = _get_name(result, "league")
                 home = _get_name(result, "home")
                 away = _get_name(result, "away")
-                events.append(UpcomingEvent(event_id, league, home, away))
+                start_time = _get_start_time(result, event_id)
+                events_with_start_times.append(
+                    (UpcomingEvent(event_id, league, home, away), start_time)
+                )
 
         records_read += len(results)
         logger.debug(
@@ -113,12 +118,32 @@ def get_upcoming_events(client: BetsApiClient, day: str = "TODAY") -> list[Upcom
         )
         page += 1
 
+    if not events_with_start_times:
+        return []
+
+    now = time.time()
+    maximum_wait_seconds = MAX_MATCH_START_HOURS * 60 * 60
+    skipped_count = sum(
+        start_time - now > maximum_wait_seconds
+        for _, start_time in events_with_start_times
+    )
+    events = [
+        event
+        for event, start_time in events_with_start_times
+        if 0 <= start_time - now <= maximum_wait_seconds
+    ]
     if not events:
+        logger.info(
+            "No matches starting within %d hours; skipping odds requests.",
+            MAX_MATCH_START_HOURS,
+        )
         return []
 
     logger.info(
-        "Found %d matches, requesting odds...",
+        "Found %d matches starting within %d hours (%d skipped), requesting odds...",
         len(events),
+        MAX_MATCH_START_HOURS,
+        skipped_count,
     )
 
     logger.info("Getting data...")
@@ -129,6 +154,26 @@ def get_upcoming_events(client: BetsApiClient, day: str = "TODAY") -> list[Upcom
         ]
         enriched_events = [future.result() for future in futures]
         return [event for event in enriched_events if event is not None]
+
+
+# Проверяет и преобразует Unix-время начала матча из ответа BetsAPI.
+def _get_start_time(event: dict[str, Any], event_id: str) -> int:
+    value = event.get("time")
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise BetsApiDataError(
+            f"BetsAPI returned an invalid start time for event {event_id}."
+        )
+    try:
+        start_time = int(value)
+    except ValueError:
+        raise BetsApiDataError(
+            f"BetsAPI returned an invalid start time for event {event_id}."
+        ) from None
+    if start_time < 0:
+        raise BetsApiDataError(
+            f"BetsAPI returned an invalid start time for event {event_id}."
+        )
+    return start_time
 
 
 # Проверяет объект участника матча и возвращает его название.
